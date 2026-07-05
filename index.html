@@ -123,7 +123,7 @@
   /* 미리보기 박스 */
   .preview-box {
     border: 1px solid var(--rule); background: #FAFAF8;
-    padding: 18px 14px; font-size: 13.5px; line-height: 1.75;
+    padding: 18px 14px; font-size: 13.5px; line-height: 1.6;
     color: #4a4a4a; max-height: 55vh; overflow-y: auto; word-break: keep-all;
     -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
   }
@@ -175,8 +175,11 @@
     outline: 1px dashed var(--accent-lt);
   }
 
-  .preview-dialogue { margin: 22px 0; line-height: 1.9; color: #4a4a4a; }
-  .preview-narration { margin: 10px 0; color: #a0a0a0; font-style: italic; font-size: 13px; line-height: 1.9; }
+  .preview-dialogue { margin: 16px 0; line-height: 1.6; color: #4a4a4a; }
+  .preview-narration { margin: 16px 0; color: #a0a0a0; font-style: italic; font-size: 13px; line-height: 1.6; }
+  /* 간격은 renderPreview()에서 인라인으로 제어 — 첫 블록은 CSS 기본값 사용 */
+  .preview-block + .insert-gap + .preview-block .preview-dialogue,
+  .preview-block + .insert-gap + .preview-block .preview-narration { margin-top: 0; }
 
   .preview-divider {
     margin: 16px 0; display: flex; align-items: center; gap: 8px;
@@ -523,7 +526,10 @@ function loadFile(file) {
 
 // ── 텍스트 파싱 ────────────────────────────────────
 function processText(raw) {
+  // ** 볼드 마킹은 보존하고, 나머지 단독 * 만 제거
+  raw = raw.replace(/\*\*(.+?)\*\*/g, '\x00BOLD_START\x00$1\x00BOLD_END\x00');
   raw = raw.replace(/\*/g, '');
+  raw = raw.replace(/\x00BOLD_START\x00(.+?)\x00BOLD_END\x00/g, '**$1**');
   // 리터럴 \n이 들어온 경우 실제 줄바꿈으로 변환
   if (!raw.includes('\n') && raw.includes('\\n')) {
     raw = raw.replace(/\\n/g, '\n');
@@ -611,6 +617,10 @@ function renderPreview() {
   }
 
   let html = '';
+  const P_SAME = '10px';
+  const P_DIFF = '16px';
+  let prevType = null; // 'dialogue' | 'narration' | null
+
   blocks.forEach((block, i) => {
     if (i > 0) {
       html += `
@@ -626,8 +636,10 @@ function renderPreview() {
     }
 
     if (block.type === 'divider') {
+      prevType = null;
       html += `<div class="preview-divider"><span>· · ·</span><span class="remove-btn" onclick="removeBlock(${i})" title="삭제">✕</span></div>`;
     } else if (block.type === 'toggle') {
+      prevType = null;
       const bodyLines = block.body.split('\n').filter(l => l.trim());
       const bodyHtml = bodyLines.map(line =>
         `<div class="preview-narration" style="font-family:${FONTS[font].stack}">${escHtml(line)}</div>`
@@ -640,6 +652,7 @@ function renderPreview() {
           </details>
         </div>`;
     } else if (block.type === 'status') {
+      prevType = null;
       const lines = escHtml(block.text).split('\n');
       const inner = lines.map(l => `<div>${l}</div>`).join('');
       html += `
@@ -651,18 +664,22 @@ function renderPreview() {
           </div>
         </div>`;
     } else if (block.type === 'dialogue') {
+      const mt = prevType === 'dialogue' ? P_SAME : P_DIFF;
+      prevType = 'dialogue';
       html += `
         <div class="preview-block" data-idx="${i}">
-          <div class="preview-dialogue" style="font-family:${FONTS[font].stack}">${escHtml(block.text)}</div>
+          <div class="preview-dialogue" style="font-family:${FONTS[font].stack};margin-top:${mt};margin-bottom:0">${renderBold(block.text.replace(/^["""]/,'').replace(/["""]$/,''))}</div>
           <div class="block-action-bar">
             <button class="block-action-btn block-action-btn-edit" onclick="startEditByIdx(${i})">수정</button>
             <button class="block-action-btn block-action-btn-del" onclick="removeBlock(${i})">삭제</button>
           </div>
         </div>`;
     } else {
+      const mt = prevType === 'narration' ? P_SAME : P_DIFF;
+      prevType = 'narration';
       html += `
         <div class="preview-block" data-idx="${i}">
-          <div class="preview-narration" style="font-family:${FONTS[font].stack}">${escHtml(block.text)}</div>
+          <div class="preview-narration" style="font-family:${FONTS[font].stack};margin-top:${mt};margin-bottom:0">${renderBold(block.text)}</div>
           <div class="block-action-bar">
             <button class="block-action-btn block-action-btn-edit" onclick="startEditByIdx(${i})">수정</button>
             <button class="block-action-btn block-action-btn-del" onclick="removeBlock(${i})">삭제</button>
@@ -925,18 +942,23 @@ function generateHtml() {
     fontLink = `<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" rel="stylesheet">\n`;
   }
 
-  const mobileStyle = `${fontLink}<div>\n<style>\n  @media screen and (max-width: 768px) {\n    .tt_article_useless_p_margin,\n    .tt_article_useless_p_margin *,\n    .entry-content,\n    .entry-content * {\n      font-size: 9px !important;\n      line-height: 1.9 !important;\n    }\n  }\n</style>\n</div>\n`;
+  const mobileStyle = `${fontLink}<div>\n<style>\n  @media screen and (max-width: 768px) {\n    .tt_article_useless_p_margin,\n    .tt_article_useless_p_margin *,\n    .entry-content,\n    .entry-content * {\n      font-size: 9px !important;\n      line-height: 1.6 !important;\n    }\n  }\n</style>\n</div>\n`;
 
   let inner = '';
+  // 문단 간격: 동일 타입 연속 = 좁게(10px), 타입 전환 = 넓게(16px)
+  const MARGIN_SAME = '10px';
+  const MARGIN_DIFF = '16px';
+  let prevContentType = null; // dialogue | narration | null
+
   for (const block of blocks) {
     if (block.type === 'divider') {
+      prevContentType = null;
       inner += `<div style="margin: 24px 0; text-align: center; color: #b0a89c; font-size: 10px; letter-spacing: 10px;">&sdot; &sdot; &sdot;</div>\n`;
     } else if (block.type === 'toggle') {
-      // 본문 줄 각각을 <div class="preview-narration"> 스타일로 렌더
+      prevContentType = null;
       const bodyLines = block.body.split('\n').filter(l => l.trim());
       const bodyHtml = bodyLines.map(line => {
         const escaped = escHtml(line);
-        // 이모지로 시작하는 항목은 bold 레이블 처리 (💬, 📅, 🗓️ 등)
         const formatted = escaped.replace(/^([\p{Emoji_Presentation}\p{Emoji}\uFE0F]+\s*[^:：]*[:：])\s*/u,
           (m, label) => `${label} `);
         return `<div style="margin: 6px 0; color: #a0a0a0; font-style: italic; font-size: 13px; line-height: 1.75; font-family: ${fontInfo.stack};">${formatted}</div>`;
@@ -948,17 +970,22 @@ ${bodyHtml}
 </div>
 </details>\n`;
     } else if (block.type === 'status') {
+      prevContentType = null;
       const lines = escHtml(block.text).split('\n');
       const linesHtml = lines.map(l => `<div>${l}</div>`).join('');
       inner += `<div style="margin: 16px 0; padding: 12px 16px; background: #faf9ff; border-left: 3px solid #d8b4fe; border-radius: 0 6px 6px 0; color: #888; font-size: 12px; line-height: 1.9; font-family: ${fontInfo.stack};">${linesHtml}</div>\n`;
     } else if (block.type === 'dialogue') {
-      inner += `<div style="margin: 22px 0; line-height: 1.9; color: #4a4a4a; font-family: ${fontInfo.stack}; font-size: 13.5px;">${escHtml(block.text)}</div>\n`;
+      const mt = prevContentType === 'dialogue' ? MARGIN_SAME : MARGIN_DIFF;
+      inner += `<div style="margin-top: ${mt}; margin-bottom: 0; line-height: 1.6; color: #4a4a4a; font-family: ${fontInfo.stack}; font-size: 13.5px;">${renderBold(block.text.replace(/^["""]/,'').replace(/["""]$/,''))}</div>\n`;
+      prevContentType = 'dialogue';
     } else {
-      inner += `<div style="margin: 10px 0; color: #a0a0a0; font-style: italic; font-size: 13px; line-height: 1.9; font-family: ${fontInfo.stack};">${escHtml(block.text)}</div>\n`;
+      const mt = prevContentType === 'narration' ? MARGIN_SAME : MARGIN_DIFF;
+      inner += `<div style="margin-top: ${mt}; margin-bottom: 0; color: #a0a0a0; font-style: italic; font-size: 13px; line-height: 1.6; font-family: ${fontInfo.stack};">${renderBold(block.text)}</div>\n`;
+      prevContentType = 'narration';
     }
   }
 
-  const finalHtml = mobileStyle + `<div style="max-width: 680px; margin: 0 auto; padding: 40px 28px 44px; background: #ffffff; color: #4a4a4a; font-family: ${fontInfo.stack}; line-height: 1.75; border-radius: 12px;">\n${inner}</div>`;
+  const finalHtml = mobileStyle + `<div style="max-width: 680px; margin: 0 auto; padding: 40px 28px 44px; background: #ffffff; color: #4a4a4a; font-family: ${fontInfo.stack}; line-height: 1.6; border-radius: 12px;">\n${inner}</div>`;
   document.getElementById('htmlOutput').value = finalHtml;
   return finalHtml;
 }
@@ -966,6 +993,11 @@ ${bodyHtml}
 function escHtml(s) {
   if (typeof s !== 'string') s = String(s ?? '');
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// **텍스트** → <strong> 변환 (escHtml 적용 후 사용)
+function renderBold(s) {
+  return escHtml(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
 }
 
 function copyHtml() {
